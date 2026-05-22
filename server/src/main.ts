@@ -214,12 +214,14 @@ function rpcGetLeaderboard(
   return JSON.stringify(getTopPlayers(nk, ctx.userId));
 }
 
-const InitModule: nkruntime.InitModule = (
+// Must be a function declaration (not const) so esbuild keeps it at the top level
+// and Nakama's goja runtime can find it via vm.Get("InitModule").
+function InitModule(
   ctx: nkruntime.Context,
   logger: nkruntime.Logger,
   nk: nkruntime.Runtime,
   initializer: nkruntime.Initializer
-) => {
+): void {
   initLeaderboards(nk);
 
   initializer.registerRpc('rpc_encounter_request',    rpcEncounterRequest);
@@ -237,5 +239,3 @@ const InitModule: nkruntime.InitModule = (
   logger.info('Overworld server runtime initialised — %d RPCs registered', 11);
 };
 
-// @ts-ignore: required by Nakama runtime
-globalThis.InitModule = InitModule;
