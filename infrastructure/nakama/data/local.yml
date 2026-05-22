@@ -23,7 +23,7 @@ session:
   token_expiry_sec: 86400
 
 runtime:
-  js_entrypoint: modules/build/main.js
+  js_entrypoint: build/main.js
   min_count: 1
   max_count: 8
   call_stack_size: 128
