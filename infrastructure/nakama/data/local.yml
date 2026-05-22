@@ -27,4 +27,3 @@ runtime:
   min_count: 1
   max_count: 8
   call_stack_size: 128
-  max_count: 256
