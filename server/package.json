@@ -1,0 +1,31 @@
+{
+  "name": "overworld-server",
+  "version": "1.0.0",
+  "description": "Overworld authoritative game server — Nakama TypeScript runtime",
+  "scripts": {
+    "build": "npx esbuild src/main.ts --bundle --platform=node --target=es2019 --outfile=build/main.js",
+    "watch": "npx esbuild src/main.ts --bundle --platform=node --target=es2019 --outfile=build/main.js --watch",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src --ext .ts",
+    "test": "jest"
+  },
+  "dependencies": {
+    "h3-js": "^4.1.0",
+    "js-sha256": "^0.11.0"
+  },
+  "devDependencies": {
+    "@types/jest": "^29.5.0",
+    "@typescript-eslint/eslint-plugin": "^7.0.0",
+    "@typescript-eslint/parser": "^7.0.0",
+    "esbuild": "^0.21.0",
+    "eslint": "^8.57.0",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.1.0",
+    "typescript": "^5.4.0"
+  },
+  "jest": {
+    "preset": "ts-jest",
+    "testEnvironment": "node",
+    "testMatch": ["**/__tests__/**/*.ts"]
+  }
+}

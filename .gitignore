@@ -1,0 +1,29 @@
+# Node / server
+server/node_modules/
+server/build/
+
+# Unity
+client/Library/
+client/Temp/
+client/Logs/
+client/UserSettings/
+client/obj/
+client/Builds/
+client/.vs/
+*.csproj
+*.sln
+*.suo
+*.user
+*.userprefs
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Secrets (never commit)
+.env
+.env.local
+infrastructure/.env*
+client/Assets/Resources/MapboxConfig.asset
+client/Assets/Resources/NakamaConfig.asset
