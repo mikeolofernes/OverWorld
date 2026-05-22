@@ -2,28 +2,12 @@ name: overworld-local
 data_dir: /nakama/data
 
 logger:
-  level: debug
+  level: info
   stdout: true
 
 console:
-  port: 7351
   username: admin
   password: admin
 
-socket:
-  port: 7349
-  max_message_size_bytes: 4096
-  ping_period_ms: 15000
-  pong_wait_ms: 25000
-
-api:
-  port: 7350
-
-session:
-  token_expiry_sec: 86400
-
 runtime:
   js_entrypoint: build/main.js
-  min_count: 1
-  max_count: 8
-  call_stack_size: 128
