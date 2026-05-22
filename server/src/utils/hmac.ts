@@ -1,7 +1,8 @@
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const jsSha256 = require('js-sha256') as { hmac: { create: (key: string) => { update: (msg: string) => { hex: () => string } } } };
 
-const SERVER_SECRET = process.env['NAKAMA_SERVER_KEY'] ?? 'overworld-local-key';
+// Nakama's V8 runtime has no process.env — set this via Nakama config runtime.env for production.
+const SERVER_SECRET = 'overworld-local-key';
 
 export function signToken(payload: string): string {
   return jsSha256.hmac.create(SERVER_SECRET).update(payload).hex();

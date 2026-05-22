@@ -3,8 +3,8 @@
   "version": "1.0.0",
   "description": "Overworld authoritative game server — Nakama TypeScript runtime",
   "scripts": {
-    "build": "npx esbuild src/main.ts --bundle --platform=node --target=es2019 --outfile=build/main.js",
-    "watch": "npx esbuild src/main.ts --bundle --platform=node --target=es2019 --outfile=build/main.js --watch",
+    "build": "npx esbuild src/main.ts --bundle --platform=browser --target=es2019 --external:crypto --external:buffer --external:fs --external:path --outfile=build/main.js",
+    "watch": "npx esbuild src/main.ts --bundle --platform=browser --target=es2019 --external:crypto --external:buffer --external:fs --external:path --outfile=build/main.js --watch",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src --ext .ts",
     "test": "jest"
