@@ -7,7 +7,7 @@ logger:
 
 console:
   username: admin
-  password: admin
+  password: admin1234
 
 runtime:
   js_entrypoint: build/main.js
