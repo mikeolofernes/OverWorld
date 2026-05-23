@@ -55,7 +55,19 @@ function App() {
   const [gpsPos, setGpsPos] = useState<{ lat: number; lng: number; accuracy: number } | null>(null);
   const [gpsError, setGpsError] = useState<string | null>(null);
   const lastGpsRef = useRef<{ lat: number; lng: number; timestamp: number } | null>(null);
+  const [testingMode, setTestingMode] = useState(false);
   const playerBp = calculatePlayerBattlePower(state.player);
+
+  function toggleTestingMode() {
+    setTestingMode((prev) => {
+      const next = !prev;
+      if (next) {
+        // immediately bring next encounter to 20m away
+        setState((s) => ({ ...s, nextEncounterAtMeters: s.creditedDistanceMeters + 20 }));
+      }
+      return next;
+    });
+  }
 
   // ── Real GPS tracking ─────────────────────────────────────────
   useEffect(() => {
@@ -218,7 +230,11 @@ function App() {
       if (!current.currentEncounter) return current;
       const result = resolveBattle(current.player, current.currentEncounter, current.tick * 313 + 77);
       setLastBattle(result);
-      return applyBattleResult(current, result, current.player.factionId);
+      const next = applyBattleResult(current, result, current.player.factionId);
+      // In testing mode, keep next encounter at 20m so encounters stay frequent
+      return testingMode
+        ? { ...next, nextEncounterAtMeters: next.creditedDistanceMeters + 20 }
+        : next;
     });
   }
 
@@ -286,6 +302,7 @@ function App() {
               fvfState={fvfState}
               gpsPos={gpsPos}
               gpsError={gpsError}
+              testingMode={testingMode}
               onToggleWalk={toggleWalk}
               onSimulateStep={simulateStep}
               onFightEncounter={fightEncounter}
@@ -294,6 +311,7 @@ function App() {
               onPickEnemy={pickEnemyFaction}
               onChallenge={challengeOpponent}
               onEndFvF={endFvF}
+              onToggleTestingMode={toggleTestingMode}
             />
           )}
           {activeView === "map" && (
@@ -326,6 +344,7 @@ function WorldView({
   fvfState,
   gpsPos,
   gpsError,
+  testingMode,
   onToggleWalk,
   onSimulateStep,
   onFightEncounter,
@@ -333,7 +352,8 @@ function WorldView({
   onStartFvF,
   onPickEnemy,
   onChallenge,
-  onEndFvF
+  onEndFvF,
+  onToggleTestingMode
 }: {
   state: GameState;
   lastBattle: BattleResult | null;
@@ -341,6 +361,7 @@ function WorldView({
   fvfState: FvFState;
   gpsPos: { lat: number; lng: number; accuracy: number } | null;
   gpsError: string | null;
+  testingMode: boolean;
   onToggleWalk: () => void;
   onSimulateStep: () => void;
   onFightEncounter: () => void;
@@ -349,6 +370,7 @@ function WorldView({
   onPickEnemy: (id: FactionId) => void;
   onChallenge: (opp: PlayerOpponent) => void;
   onEndFvF: () => void;
+  onToggleTestingMode: () => void;
 }) {
   const selectedFaction = factions.find((f) => f.id === state.player.factionId);
   const currentCell = state.territory.find((cell) => cell.id === state.playerCellId);
@@ -479,6 +501,10 @@ function WorldView({
       <div className="bottom-sheet">
         {lastBattle ? <BattleReadout battle={lastBattle} /> : null}
         <Log entries={state.encounterLog} />
+        <label className="test-mode-toggle">
+          <input type="checkbox" checked={testingMode} onChange={onToggleTestingMode} />
+          <span>Testing mode — 20m encounters</span>
+        </label>
       </div>
     </>
   );

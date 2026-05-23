@@ -788,6 +788,30 @@ h2 {
   border-left: 2px solid var(--line);
 }
 
+/* ── Testing mode toggle ──────────────────────────── */
+
+.test-mode-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border: 1px dashed rgba(240, 203, 98, 0.28);
+  border-radius: 6px;
+  background: rgba(240, 203, 98, 0.06);
+  color: rgba(240, 203, 98, 0.7);
+  font-size: 0.72rem;
+  font-weight: 700;
+  cursor: pointer;
+  user-select: none;
+}
+
+.test-mode-toggle input[type="checkbox"] {
+  accent-color: #f0cb62;
+  width: 14px;
+  height: 14px;
+  cursor: pointer;
+}
+
 /* ── GPS pill (inline in walk-meta) ───────────────── */
 
 .gps-pill {
