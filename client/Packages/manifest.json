@@ -18,6 +18,11 @@
   ],
   "_NOTES": [
     "Mapbox Unity SDK must be imported manually via .unitypackage from https://github.com/mapbox/mapbox-unity-sdk/releases",
-    "After import, Mapbox will register itself under com.mapbox.maps.unity in this manifest."
+    "After import, Mapbox will register itself under com.mapbox.maps.unity in this manifest.",
+    "Google Sign-In Unity Plugin must be imported manually via .unitypackage from https://github.com/googlesamples/google-signin-unity/releases",
+    "The plugin provides the Google.SignIn namespace used by Auth/GoogleSignInManager.cs. It uses the native Android Account Chooser and iOS ASWebAuthenticationSession — NOT a WebView — which avoids the disallowed_useragent 403 from Google OAuth.",
+    "After import the plugin registers itself as com.google.signin in this manifest.",
+    "Also import the External Dependency Manager (EDM4U) bundled with the plugin to resolve Android/iOS native dependencies.",
+    "In the Firebase console set the Web client ID in GoogleSignInManager's Inspector field (Authentication > Sign-in method > Google > Web client ID)."
   ]
 }

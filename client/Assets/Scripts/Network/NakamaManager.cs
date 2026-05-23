@@ -3,6 +3,7 @@ using System.Threading.Tasks;
 using UnityEngine;
 using Nakama;
 using Newtonsoft.Json;
+using Overworld.Auth;
 
 namespace Overworld.Network
 {
@@ -19,7 +20,13 @@ namespace Overworld.Network
         [SerializeField] private int port = 7350;
         [SerializeField] private string serverKey = "overworld-local-key";
 
+        // Set to true to skip Google Sign-In and use device ID (Editor / CI only).
+        [SerializeField] private bool useDeviceAuthFallback = false;
+
         private const string SessionPrefsKey = "nakama_session";
+        private const string SessionAuthTypeKey = "nakama_session_auth_type";
+        private const string AuthTypeGoogle = "google";
+        private const string AuthTypeDevice = "device";
 
         private void Awake()
         {
@@ -47,10 +54,50 @@ namespace Overworld.Network
                 }
             }
 
+#if UNITY_EDITOR
+            // Always use device auth in the editor so Google Sign-In isn't required.
+            await AuthenticateDeviceAsync();
+#else
+            if (useDeviceAuthFallback)
+                await AuthenticateDeviceAsync();
+            else
+                await AuthenticateGoogleAsync();
+#endif
+        }
+
+        /// <summary>
+        /// Signs in via the native Google Sign-In SDK (no WebView) and
+        /// authenticates with Nakama using the resulting Google ID token.
+        /// This avoids Google's disallowed_useragent / 403 restriction that
+        /// blocks OAuth flows launched from embedded WebViews.
+        /// </summary>
+        public async Task AuthenticateGoogleAsync()
+        {
+            string idToken = await GoogleSignInManager.Instance.GetIdTokenAsync();
+            Session = await Client.AuthenticateGoogleAsync(idToken, null, true);
+            PlayerPrefs.SetString(SessionPrefsKey, Session.AuthToken);
+            PlayerPrefs.SetString(SessionAuthTypeKey, AuthTypeGoogle);
+            await ConnectSocketAsync();
+        }
+
+        private async Task AuthenticateDeviceAsync()
+        {
             string deviceId = SystemInfo.deviceUniqueIdentifier;
             Session = await Client.AuthenticateDeviceAsync(deviceId, null, true);
             PlayerPrefs.SetString(SessionPrefsKey, Session.AuthToken);
+            PlayerPrefs.SetString(SessionAuthTypeKey, AuthTypeDevice);
             await ConnectSocketAsync();
+        }
+
+        public void SignOut()
+        {
+            var authType = PlayerPrefs.GetString(SessionAuthTypeKey, AuthTypeDevice);
+            if (authType == AuthTypeGoogle)
+                GoogleSignInManager.Instance.SignOut();
+
+            PlayerPrefs.DeleteKey(SessionPrefsKey);
+            PlayerPrefs.DeleteKey(SessionAuthTypeKey);
+            Session = null;
         }
 
         private async Task ConnectSocketAsync()
