@@ -166,6 +166,13 @@ function App() {
     });
   }
 
+  // ── Auto-battle: resolve encounter immediately when one appears ──
+  useEffect(() => {
+    if (state.currentEncounter) {
+      fightEncounter();
+    }
+  }, [state.currentEncounter]);
+
   // ── Real GPS tracking ─────────────────────────────────────────
   useEffect(() => {
     if (!navigator.geolocation) {
@@ -433,7 +440,6 @@ function App() {
               username={username}
               onToggleWalk={toggleWalk}
               onSimulateStep={simulateStep}
-              onFightEncounter={fightEncounter}
               onUpgrade={upgrade}
               onStartFvF={startFvF}
               onPickEnemy={pickEnemyFaction}
@@ -477,7 +483,6 @@ function WorldView({
   username,
   onToggleWalk,
   onSimulateStep,
-  onFightEncounter,
   onUpgrade,
   onStartFvF,
   onPickEnemy,
@@ -496,7 +501,6 @@ function WorldView({
   username: string;
   onToggleWalk: () => void;
   onSimulateStep: () => void;
-  onFightEncounter: () => void;
   onUpgrade: () => void;
   onStartFvF: () => void;
   onPickEnemy: (id: FactionId) => void;
@@ -629,10 +633,6 @@ function WorldView({
             <Swords size={28} />
             <strong>{state.currentEncounter.battlePower}</strong>
           </div>
-          <button className="primary-button" onClick={onFightEncounter}>
-            <Swords size={18} />
-            Auto Battle
-          </button>
         </section>
       )}
 
