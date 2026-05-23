@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { Circle, MapContainer, Marker, TileLayer } from "react-leaflet";
 import L from "leaflet";
@@ -35,7 +35,7 @@ import {
 } from "./game/serverSimulator";
 import { factions, upgradeCosts } from "./game/tuning";
 import type { BattleResult, FactionId, GameState, PlayerOpponent, PvPResult, TerritoryCell } from "./game/types";
-import { CELL_GEO, MAP_CENTER, markerCount, scatterPositions } from "./game/mapData";
+import { CELL_GEO, MAP_CENTER, cellForPosition, haversineMeters, markerCount, nearestCell, scatterPositions } from "./game/mapData";
 import "./styles.css";
 
 type ActiveView = "world" | "map" | "character";
@@ -52,7 +52,74 @@ function App() {
   const [lastBattle, setLastBattle] = useState<BattleResult | null>(null);
   const [activeView, setActiveView] = useState<ActiveView>("world");
   const [fvfState, setFvfState] = useState<FvFState>({ phase: "idle" });
+  const [gpsPos, setGpsPos] = useState<{ lat: number; lng: number; accuracy: number } | null>(null);
+  const [gpsError, setGpsError] = useState<string | null>(null);
+  const lastGpsRef = useRef<{ lat: number; lng: number; timestamp: number } | null>(null);
   const playerBp = calculatePlayerBattlePower(state.player);
+
+  // ── Real GPS tracking ─────────────────────────────────────────
+  useEffect(() => {
+    if (!navigator.geolocation) {
+      setGpsError("GPS not supported on this device");
+      return;
+    }
+    if (state.walkState !== "walking") return;
+
+    const watchId = navigator.geolocation.watchPosition(
+      (pos) => {
+        const { latitude: lat, longitude: lng, accuracy } = pos.coords;
+        const timestamp = pos.timestamp;
+        setGpsPos({ lat, lng, accuracy });
+        setGpsError(null);
+
+        const last = lastGpsRef.current;
+        if (last) {
+          const distanceMeters = haversineMeters(last.lat, last.lng, lat, lng);
+          const elapsedSeconds = (timestamp - last.timestamp) / 1000;
+          if (distanceMeters > 0 && elapsedSeconds > 0) {
+            const detectedCellId = cellForPosition(lat, lng) ?? nearestCell(lat, lng);
+            const sample = { distanceMeters, elapsedSeconds, accuracyMeters: accuracy };
+            setState((current) => {
+              if (current.walkState !== "walking" || current.currentEncounter) return current;
+              const movement = validateMovement(sample);
+              if (!movement.accepted) {
+                return {
+                  ...current,
+                  encounterLog: [
+                    `GPS rejected: ${movement.rejectedReason ?? "unknown"}.`,
+                    ...current.encounterLog
+                  ].slice(0, 6)
+                };
+              }
+              const nextState = {
+                ...current,
+                playerCellId: detectedCellId,
+                creditedDistanceMeters: current.creditedDistanceMeters + movement.creditedMeters
+              };
+              const encounter = maybeCreateEncounter(nextState);
+              const cellLabel = current.territory.find((c) => c.id === detectedCellId)?.label ?? detectedCellId;
+              return {
+                ...nextState,
+                currentEncounter: encounter,
+                encounterLog: encounter
+                  ? [`${encounter.type} Echo near ${cellLabel}!`, ...current.encounterLog].slice(0, 6)
+                  : [`+${Math.round(movement.creditedMeters)}m GPS · ${cellLabel}.`, ...current.encounterLog].slice(0, 6)
+              };
+            });
+          }
+        }
+        lastGpsRef.current = { lat, lng, timestamp };
+      },
+      (err) => {
+        setGpsError(err.message);
+      },
+      { enableHighAccuracy: true, maximumAge: 5000, timeout: 15000 }
+    );
+
+    return () => {
+      navigator.geolocation.clearWatch(watchId);
+    };
+  }, [state.walkState]);
 
   function chooseFaction(factionId: FactionId) {
     setState((current) => ({
@@ -217,6 +284,8 @@ function App() {
               lastBattle={lastBattle}
               playerBp={playerBp}
               fvfState={fvfState}
+              gpsPos={gpsPos}
+              gpsError={gpsError}
               onToggleWalk={toggleWalk}
               onSimulateStep={simulateStep}
               onFightEncounter={fightEncounter}
@@ -232,6 +301,7 @@ function App() {
               cells={state.territory}
               playerCellId={state.playerCellId}
               factionId={state.player.factionId}
+              playerGpsPos={gpsPos ? [gpsPos.lat, gpsPos.lng] : undefined}
             />
           )}
           {activeView === "character" && (
@@ -254,6 +324,8 @@ function WorldView({
   lastBattle,
   playerBp,
   fvfState,
+  gpsPos,
+  gpsError,
   onToggleWalk,
   onSimulateStep,
   onFightEncounter,
@@ -267,6 +339,8 @@ function WorldView({
   lastBattle: BattleResult | null;
   playerBp: number;
   fvfState: FvFState;
+  gpsPos: { lat: number; lng: number; accuracy: number } | null;
+  gpsError: string | null;
   onToggleWalk: () => void;
   onSimulateStep: () => void;
   onFightEncounter: () => void;
@@ -332,6 +406,25 @@ function WorldView({
               {state.walkState}
             </span>
           </div>
+
+          {gpsPos && (
+            <div className="gps-status gps-status--active">
+              <span className="gps-dot" />
+              GPS · ±{Math.round(gpsPos.accuracy)}m · {gpsPos.lat.toFixed(5)}, {gpsPos.lng.toFixed(5)}
+            </div>
+          )}
+          {gpsError && (
+            <div className="gps-status gps-status--error">
+              <span className="gps-dot" />
+              GPS error: {gpsError}
+            </div>
+          )}
+          {!gpsPos && !gpsError && state.walkState === "walking" && (
+            <div className="gps-status gps-status--waiting">
+              <span className="gps-dot" />
+              Waiting for GPS signal…
+            </div>
+          )}
         </div>
 
       </div>
@@ -444,11 +537,13 @@ function playerIcon(color: string) {
 function MapView({
   cells,
   playerCellId,
-  factionId
+  factionId,
+  playerGpsPos
 }: {
   cells: TerritoryCell[];
   playerCellId: string;
   factionId: FactionId | null;
+  playerGpsPos?: [number, number]; // [lat, lng] real GPS, overrides cell center
 }) {
   const markers = useMemo(() => {
     const leaderCell: Partial<Record<FactionId, string>> = {};
@@ -477,6 +572,9 @@ function MapView({
 
   const playerGeo = CELL_GEO[playerCellId];
   const playerColor = factions.find((f) => f.id === factionId)?.color ?? "#f4f7e8";
+  // Use real GPS position if available, otherwise fall back to cell center
+  const playerPos: [number, number] | undefined =
+    playerGpsPos ?? (playerGeo ? [playerGeo.lat, playerGeo.lng] : undefined);
 
   return (
     <div className="map-gl-container">
@@ -513,9 +611,9 @@ function MapView({
           />
         ))}
 
-        {/* Player */}
-        {playerGeo && (
-          <Marker position={[playerGeo.lat, playerGeo.lng]} icon={playerIcon(playerColor)} />
+        {/* Player — real GPS position if available, else cell center */}
+        {playerPos && (
+          <Marker position={playerPos} icon={playerIcon(playerColor)} />
         )}
       </MapContainer>
 

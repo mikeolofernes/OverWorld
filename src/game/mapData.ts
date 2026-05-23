@@ -67,3 +67,38 @@ export function circlePolygon(lat: number, lng: number, radiusKm: number, points
 export function markerCount(influence: number, activity: number): number {
   return Math.max(1, Math.min(10, Math.floor(influence / 5) + Math.floor(activity / 4)));
 }
+
+// ── GPS helpers ───────────────────────────────────────────────────
+
+function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLng = ((lng2 - lng1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+export function haversineMeters(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  return haversineKm(lat1, lng1, lat2, lng2) * 1000;
+}
+
+/** Returns cellId if player is inside that cell's radius, else null */
+export function cellForPosition(lat: number, lng: number): string | null {
+  for (const [cellId, geo] of Object.entries(CELL_GEO)) {
+    if (haversineKm(lat, lng, geo.lat, geo.lng) <= geo.radiusKm) return cellId;
+  }
+  return null;
+}
+
+/** Always returns the nearest cellId (fallback when outside all radii) */
+export function nearestCell(lat: number, lng: number): string {
+  let best = "";
+  let bestDist = Infinity;
+  for (const [cellId, geo] of Object.entries(CELL_GEO)) {
+    const d = haversineKm(lat, lng, geo.lat, geo.lng);
+    if (d < bestDist) { bestDist = d; best = cellId; }
+  }
+  return best;
+}

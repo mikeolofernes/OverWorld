@@ -788,6 +788,48 @@ h2 {
   border-left: 2px solid var(--line);
 }
 
+/* ── GPS status ───────────────────────────────────── */
+
+.gps-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  font-size: 0.72rem;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gps-dot {
+  flex: 0 0 auto;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--muted);
+}
+
+.gps-status--active .gps-dot {
+  background: #37d67a;
+  box-shadow: 0 0 5px #37d67a;
+  animation: gps-pulse 2s ease-in-out infinite;
+}
+
+.gps-status--error .gps-dot {
+  background: var(--danger);
+}
+
+.gps-status--waiting .gps-dot {
+  background: #f0cb62;
+  animation: gps-pulse 1s ease-in-out infinite;
+}
+
+@keyframes gps-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
 /* ── FvF Panel ────────────────────────────────────── */
 
 .fvf-panel {
