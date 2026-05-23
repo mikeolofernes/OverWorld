@@ -77,3 +77,21 @@ export interface GameState {
   cooldownUntilTick: number | null;
   tick: number;
 }
+
+// ── PvP / Faction-vs-Faction ──────────────────────────────────────
+
+export interface PlayerOpponent {
+  id: string;
+  name: string;
+  factionId: FactionId;
+  level: number;
+  battlePower: number;
+}
+
+export interface PvPResult {
+  won: boolean;
+  myBp: number;
+  enemyBp: number;
+  winProbability: number;
+  scoreGained: number; // = defeated enemy BP if won, 0 if lost
+}

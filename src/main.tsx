@@ -15,29 +15,43 @@ import {
   RadioTower,
   Shield,
   Swords,
+  Target,
+  Trophy,
   User,
+  Users,
   Zap
 } from "lucide-react";
 import {
   applyBattleResult,
   calculatePlayerBattlePower,
   createInitialState,
+  generateFvFScores,
+  generateOpponents,
   maybeCreateEncounter,
   resolveBattle,
+  resolvePvpBattle,
   upgradePlayer,
   validateMovement
 } from "./game/serverSimulator";
 import { factions, upgradeCosts } from "./game/tuning";
-import type { BattleResult, FactionId, GameState, TerritoryCell } from "./game/types";
+import type { BattleResult, FactionId, GameState, PlayerOpponent, PvPResult, TerritoryCell } from "./game/types";
 import { CELL_GEO, MAP_CENTER, markerCount, scatterPositions } from "./game/mapData";
 import "./styles.css";
 
 type ActiveView = "world" | "map" | "character";
 
+// ── FvF state machine ─────────────────────────────────────────────
+type FvFState =
+  | { phase: "idle" }
+  | { phase: "picking" }
+  | { phase: "selecting"; enemyFactionId: FactionId; opponents: PlayerOpponent[] }
+  | { phase: "result"; enemyFactionId: FactionId; pvpResult: PvPResult; factionScores: Record<FactionId, number> };
+
 function App() {
   const [state, setState] = useState<GameState>(() => createInitialState());
   const [lastBattle, setLastBattle] = useState<BattleResult | null>(null);
   const [activeView, setActiveView] = useState<ActiveView>("world");
+  const [fvfState, setFvfState] = useState<FvFState>({ phase: "idle" });
   const playerBp = calculatePlayerBattlePower(state.player);
 
   function chooseFaction(factionId: FactionId) {
@@ -141,6 +155,43 @@ function App() {
     });
   }
 
+  function startFvF() {
+    setFvfState({ phase: "picking" });
+  }
+
+  function pickEnemyFaction(enemyFactionId: FactionId) {
+    const seed = state.tick * 541 + Math.round(state.creditedDistanceMeters) + 13;
+    const opponents = generateOpponents(enemyFactionId, state.player.level, seed);
+    setFvfState({ phase: "selecting", enemyFactionId, opponents });
+  }
+
+  function challengeOpponent(opponent: PlayerOpponent) {
+    if (fvfState.phase !== "selecting" || !state.player.factionId) return;
+    const seed = state.tick * 1009 + opponent.battlePower;
+    const pvpResult = resolvePvpBattle(playerBp, opponent.battlePower, seed);
+    const scoreSeed = state.tick * 373 + pvpResult.scoreGained + 7;
+    const factionScores = generateFvFScores(
+      pvpResult.scoreGained,
+      state.player.factionId,
+      fvfState.enemyFactionId,
+      scoreSeed
+    );
+    setState((current) => ({
+      ...current,
+      encounterLog: [
+        pvpResult.won
+          ? `PvP victory vs ${opponent.name}. +${pvpResult.scoreGained} score.`
+          : `PvP defeat vs ${opponent.name}. No score gained.`,
+        ...current.encounterLog
+      ].slice(0, 6)
+    }));
+    setFvfState({ phase: "result", enemyFactionId: fvfState.enemyFactionId, pvpResult, factionScores });
+  }
+
+  function endFvF() {
+    setFvfState({ phase: "idle" });
+  }
+
   function upgrade() {
     setState((current) => {
       const upgraded = upgradePlayer(current.player);
@@ -165,10 +216,15 @@ function App() {
               state={state}
               lastBattle={lastBattle}
               playerBp={playerBp}
+              fvfState={fvfState}
               onToggleWalk={toggleWalk}
               onSimulateStep={simulateStep}
               onFightEncounter={fightEncounter}
               onUpgrade={upgrade}
+              onStartFvF={startFvF}
+              onPickEnemy={pickEnemyFaction}
+              onChallenge={challengeOpponent}
+              onEndFvF={endFvF}
             />
           )}
           {activeView === "map" && (
@@ -197,18 +253,28 @@ function WorldView({
   state,
   lastBattle,
   playerBp,
+  fvfState,
   onToggleWalk,
   onSimulateStep,
   onFightEncounter,
-  onUpgrade
+  onUpgrade,
+  onStartFvF,
+  onPickEnemy,
+  onChallenge,
+  onEndFvF
 }: {
   state: GameState;
   lastBattle: BattleResult | null;
   playerBp: number;
+  fvfState: FvFState;
   onToggleWalk: () => void;
   onSimulateStep: () => void;
   onFightEncounter: () => void;
   onUpgrade: () => void;
+  onStartFvF: () => void;
+  onPickEnemy: (id: FactionId) => void;
+  onChallenge: (opp: PlayerOpponent) => void;
+  onEndFvF: () => void;
 }) {
   const selectedFaction = factions.find((f) => f.id === state.player.factionId);
   const currentCell = state.territory.find((cell) => cell.id === state.playerCellId);
@@ -280,7 +346,24 @@ function WorldView({
             <Boxes size={18} />
             Upgrade
           </button>
+          {state.player.factionId && fvfState.phase === "idle" && (
+            <button className="fvf-trigger-btn" onClick={onStartFvF} title="Faction vs Faction">
+              <Users size={18} />
+              FvF
+            </button>
+          )}
         </div>
+      )}
+
+      {!state.currentEncounter && fvfState.phase !== "idle" && (
+        <FvFPanel
+          fvfState={fvfState}
+          playerFactionId={state.player.factionId!}
+          playerBp={playerBp}
+          onPickEnemy={onPickEnemy}
+          onChallenge={onChallenge}
+          onEnd={onEndFvF}
+        />
       )}
 
       {state.currentEncounter && (
@@ -615,6 +698,156 @@ function TabBar({
       </button>
     </nav>
   );
+}
+
+function FvFPanel({
+  fvfState,
+  playerFactionId,
+  playerBp,
+  onPickEnemy,
+  onChallenge,
+  onEnd
+}: {
+  fvfState: FvFState;
+  playerFactionId: FactionId;
+  playerBp: number;
+  onPickEnemy: (id: FactionId) => void;
+  onChallenge: (opp: PlayerOpponent) => void;
+  onEnd: () => void;
+}) {
+  const otherFactions = factions.filter((f) => f.id !== playerFactionId);
+
+  if (fvfState.phase === "picking") {
+    return (
+      <section className="fvf-panel">
+        <div className="fvf-header">
+          <p className="eyebrow">Faction vs Faction</p>
+          <h2>Choose Enemy Faction</h2>
+        </div>
+        <div className="fvf-faction-pick">
+          {otherFactions.map((f) => (
+            <button
+              key={f.id}
+              className="fvf-faction-btn"
+              style={{ "--accent": f.color } as React.CSSProperties}
+              onClick={() => onPickEnemy(f.id)}
+            >
+              <Shield size={16} />
+              {f.name}
+            </button>
+          ))}
+        </div>
+        <button className="secondary-button fvf-cancel" onClick={onEnd}>
+          Cancel
+        </button>
+      </section>
+    );
+  }
+
+  if (fvfState.phase === "selecting") {
+    const enemyFaction = factions.find((f) => f.id === fvfState.enemyFactionId)!;
+    return (
+      <section className="fvf-panel">
+        <div className="fvf-header">
+          <p className="eyebrow">Enemy Found</p>
+          <h2 style={{ color: enemyFaction.color }}>{enemyFaction.name}</h2>
+          <span className="fvf-sub">Your BP: <strong>{playerBp}</strong> · Pick a target</span>
+        </div>
+        <div className="fvf-opponents">
+          {fvfState.opponents.map((opp) => {
+            const odds = Math.round((playerBp / (playerBp + opp.battlePower)) * 100);
+            return (
+              <div key={opp.id} className="fvf-opponent-card">
+                <div className="fvf-opp-info">
+                  <strong>{opp.name}</strong>
+                  <span className="eyebrow">LV {opp.level}</span>
+                </div>
+                <div className="fvf-opp-bp">
+                  <Zap size={13} />
+                  {opp.battlePower}
+                  <span className="fvf-odds">{odds}%</span>
+                </div>
+                <button
+                  className="fvf-challenge-btn"
+                  style={{ "--accent": enemyFaction.color } as React.CSSProperties}
+                  onClick={() => onChallenge(opp)}
+                >
+                  <Target size={14} />
+                  Fight
+                </button>
+              </div>
+            );
+          })}
+        </div>
+        <button className="secondary-button fvf-cancel" onClick={onEnd}>
+          Retreat
+        </button>
+      </section>
+    );
+  }
+
+  if (fvfState.phase === "result") {
+    const { pvpResult, factionScores } = fvfState;
+    const sorted = factions
+      .filter((f) => factionScores[f.id] > 0)
+      .sort((a, b) => factionScores[b.id] - factionScores[a.id]);
+    const winner = sorted[0];
+    const myFaction = factions.find((f) => f.id === playerFactionId)!;
+    const myWonFvF = winner?.id === playerFactionId;
+
+    return (
+      <section className="fvf-panel">
+        <div className={`fvf-pvp-result ${pvpResult.won ? "won" : "lost"}`}>
+          <Compass size={16} />
+          <span>{pvpResult.won ? "PvP Victory" : "PvP Defeat"}</span>
+          <span className="fvf-pvp-detail">
+            {pvpResult.myBp} vs {pvpResult.enemyBp} BP · {Math.round(pvpResult.winProbability * 100)}% odds
+          </span>
+          {pvpResult.won && <span className="fvf-score-gained">+{pvpResult.scoreGained} pts</span>}
+        </div>
+
+        <div className="fvf-score-tally">
+          <p className="eyebrow">Faction War Score</p>
+          {factions.map((f) => {
+            const score = factionScores[f.id];
+            if (!score) return null;
+            const isWinner = f.id === winner?.id;
+            return (
+              <div
+                key={f.id}
+                className={`fvf-score-row ${isWinner ? "winner" : ""}`}
+                style={{ "--accent": f.color } as React.CSSProperties}
+              >
+                <span
+                  className="fvf-score-faction"
+                  style={{ color: f.color }}
+                >
+                  {f.name}
+                </span>
+                <strong>{score}</strong>
+                {isWinner && (
+                  <span className="winner-badge">
+                    <Trophy size={11} />
+                    WINS
+                  </span>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        <div className={`fvf-war-verdict ${myWonFvF ? "won" : "lost"}`}>
+          {myWonFvF ? `${myFaction.name} dominates this war!` : `${myFaction.name} fell short. Train harder.`}
+        </div>
+
+        <button className="primary-button" onClick={onEnd}>
+          Done
+        </button>
+      </section>
+    );
+  }
+
+  return null;
 }
 
 function TerritoryMap({

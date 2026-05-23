@@ -15,6 +15,8 @@ import type {
   LocationSample,
   MovementResult,
   Player,
+  PlayerOpponent,
+  PvPResult,
   TerritoryCell
 } from "./types";
 import { integerBetween, mulberry32, pickWeighted } from "./random";
@@ -239,6 +241,58 @@ export function normalizeOwner(cell: TerritoryCell): TerritoryCell {
     ...cell,
     owner: score >= 30 && score - second >= 4 ? winner : null
   };
+}
+
+// ── PvP / Faction-vs-Faction ──────────────────────────────────────
+
+const OPPONENT_NAMES = [
+  "Enzo_B", "Chloe_M", "Kian_R", "Dani_V", "Marco_P",
+  "Lea_C", "Renz_G", "Ysabel_T", "Jed_N", "Mira_L",
+  "Gab_S", "Trish_A", "Ivan_D", "Nova_F", "Rex_H"
+];
+
+export function generateOpponents(
+  enemyFactionId: FactionId,
+  playerLevel: number,
+  seed: number
+): PlayerOpponent[] {
+  const rng = mulberry32(seed);
+  return Array.from({ length: 4 }, (_, i) => {
+    const level = integerBetween(rng, Math.max(1, playerLevel - 2), playerLevel + 3);
+    const baseBp = integerBetween(rng, 55, 95) + level * 12;
+    const nameIdx = Math.floor(rng() * OPPONENT_NAMES.length);
+    return {
+      id: `opp-${i}-${seed}`,
+      name: OPPONENT_NAMES[nameIdx],
+      factionId: enemyFactionId,
+      level,
+      battlePower: baseBp
+    };
+  });
+}
+
+export function resolvePvpBattle(myBp: number, enemyBp: number, seed: number): PvPResult {
+  const rng = mulberry32(seed);
+  const winProbability = myBp / (myBp + enemyBp);
+  const won = rng() <= winProbability;
+  return { won, myBp, enemyBp, winProbability, scoreGained: won ? enemyBp : 0 };
+}
+
+export function generateFvFScores(
+  playerScore: number,
+  playerFactionId: FactionId,
+  enemyFactionId: FactionId,
+  seed: number
+): Record<FactionId, number> {
+  const rng = mulberry32(seed);
+  // 3 allied bots score between 40–220 each
+  const allyExtra = Array.from({ length: 3 }, () => integerBetween(rng, 40, 220)).reduce((a, b) => a + b, 0);
+  // 4 enemy players score between 40–220 each
+  const enemyTotal = Array.from({ length: 4 }, () => integerBetween(rng, 40, 220)).reduce((a, b) => a + b, 0);
+  const scores: Record<FactionId, number> = { verdant: 0, ember: 0, lumen: 0 };
+  scores[playerFactionId] = playerScore + allyExtra;
+  scores[enemyFactionId] = enemyTotal;
+  return scores;
 }
 
 function createCell(
