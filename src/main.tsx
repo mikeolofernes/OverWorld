@@ -405,26 +405,25 @@ function WorldView({
               <Activity size={15} />
               {state.walkState}
             </span>
+            {gpsPos && (
+              <span className="gps-pill gps-pill--active" title={`${gpsPos.lat.toFixed(5)}, ${gpsPos.lng.toFixed(5)}`}>
+                <span className="gps-dot" />
+                ±{Math.round(gpsPos.accuracy)}m
+              </span>
+            )}
+            {gpsError && (
+              <span className="gps-pill gps-pill--error" title={gpsError}>
+                <span className="gps-dot" />
+                GPS err
+              </span>
+            )}
+            {!gpsPos && !gpsError && state.walkState === "walking" && (
+              <span className="gps-pill gps-pill--waiting">
+                <span className="gps-dot" />
+                GPS…
+              </span>
+            )}
           </div>
-
-          {gpsPos && (
-            <div className="gps-status gps-status--active">
-              <span className="gps-dot" />
-              GPS · ±{Math.round(gpsPos.accuracy)}m · {gpsPos.lat.toFixed(5)}, {gpsPos.lng.toFixed(5)}
-            </div>
-          )}
-          {gpsError && (
-            <div className="gps-status gps-status--error">
-              <span className="gps-dot" />
-              GPS error: {gpsError}
-            </div>
-          )}
-          {!gpsPos && !gpsError && state.walkState === "walking" && (
-            <div className="gps-status gps-status--waiting">
-              <span className="gps-dot" />
-              Waiting for GPS signal…
-            </div>
-          )}
         </div>
 
       </div>

@@ -788,46 +788,54 @@ h2 {
   border-left: 2px solid var(--line);
 }
 
-/* ── GPS status ───────────────────────────────────── */
+/* ── GPS pill (inline in walk-meta) ───────────────── */
 
-.gps-status {
-  display: flex;
+.gps-pill {
+  display: inline-flex;
   align-items: center;
-  gap: 6px;
-  margin-top: 8px;
+  gap: 4px;
   font-size: 0.72rem;
   color: var(--muted);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .gps-dot {
   flex: 0 0 auto;
-  width: 7px;
-  height: 7px;
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
   background: var(--muted);
 }
 
-.gps-status--active .gps-dot {
+.gps-pill--active .gps-dot {
   background: #37d67a;
-  box-shadow: 0 0 5px #37d67a;
+  box-shadow: 0 0 4px #37d67a;
   animation: gps-pulse 2s ease-in-out infinite;
 }
 
-.gps-status--error .gps-dot {
+.gps-pill--active {
+  color: #37d67a;
+}
+
+.gps-pill--error .gps-dot {
   background: var(--danger);
 }
 
-.gps-status--waiting .gps-dot {
+.gps-pill--error {
+  color: var(--danger);
+}
+
+.gps-pill--waiting .gps-dot {
   background: #f0cb62;
   animation: gps-pulse 1s ease-in-out infinite;
 }
 
+.gps-pill--waiting {
+  color: #f0cb62;
+}
+
 @keyframes gps-pulse {
   0%, 100% { opacity: 1; }
-  50% { opacity: 0.4; }
+  50% { opacity: 0.35; }
 }
 
 /* ── FvF Panel ────────────────────────────────────── */
