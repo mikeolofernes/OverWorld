@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { Circle, MapContainer, Marker, TileLayer } from "react-leaflet";
 import L from "leaflet";
@@ -8,6 +8,7 @@ import {
   Boxes,
   Compass,
   Footprints,
+  LogOut,
   Map,
   MapPin,
   Pause,
@@ -21,6 +22,14 @@ import {
   Users,
   Zap
 } from "lucide-react";
+import {
+  onAuthStateChanged,
+  signInWithPopup,
+  signOut,
+  type User as FirebaseUser
+} from "firebase/auth";
+import { auth, googleProvider } from "./firebase";
+import { createPlayer, loadPlayer, savePlayer } from "./game/persistence";
 import {
   applyBattleResult,
   calculatePlayerBattlePower,
@@ -39,6 +48,7 @@ import { CELL_GEO, MAP_CENTER, cellForPosition, haversineMeters, markerCount, ne
 import "./styles.css";
 
 type ActiveView = "world" | "map" | "character";
+type AuthPhase = "loading" | "unauthenticated" | "setup" | "playing";
 
 // ── FvF state machine ─────────────────────────────────────────────
 type FvFState =
@@ -48,6 +58,13 @@ type FvFState =
   | { phase: "result"; enemyFactionId: FactionId; pvpResult: PvPResult; factionScores: Record<FactionId, number> };
 
 function App() {
+  // ── Auth ────────────────────────────────────────────────────────
+  const [authPhase, setAuthPhase] = useState<AuthPhase>("loading");
+  const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null);
+  const [username, setUsername] = useState<string>("");
+  const [authError, setAuthError] = useState<string | null>(null);
+
+  // ── Game ────────────────────────────────────────────────────────
   const [state, setState] = useState<GameState>(() => createInitialState());
   const [lastBattle, setLastBattle] = useState<BattleResult | null>(null);
   const [activeView, setActiveView] = useState<ActiveView>("world");
@@ -58,11 +75,91 @@ function App() {
   const [testingMode, setTestingMode] = useState(false);
   const playerBp = calculatePlayerBattlePower(state.player);
 
+  // ── Firebase auth listener ───────────────────────────────────────
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, async (user) => {
+      if (!user) {
+        setFirebaseUser(null);
+        setAuthPhase("unauthenticated");
+        return;
+      }
+      setFirebaseUser(user);
+      try {
+        const saved = await loadPlayer(user.uid);
+        if (!saved) {
+          setAuthPhase("setup");
+        } else {
+          setUsername(saved.username);
+          setState((s) => ({
+            ...s,
+            player: saved.player,
+            playerCellId: saved.playerCellId,
+            territory: saved.territory,
+            creditedDistanceMeters: saved.creditedDistanceMeters,
+            encounterLog: saved.encounterLog
+          }));
+          setAuthPhase("playing");
+        }
+      } catch {
+        setAuthPhase("setup");
+      }
+    });
+    return unsub;
+  }, []);
+
+  // ── Auto-save (debounced 3s) ─────────────────────────────────────
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const scheduleSave = useCallback((s: GameState, user: FirebaseUser, name: string) => {
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => {
+      savePlayer(user.uid, name, s).catch(console.error);
+    }, 3000);
+  }, []);
+
+  useEffect(() => {
+    if (authPhase !== "playing" || !firebaseUser) return;
+    scheduleSave(state, firebaseUser, username);
+  }, [state, authPhase, firebaseUser, username, scheduleSave]);
+
+  // ── Auth actions ─────────────────────────────────────────────────
+  async function loginWithGoogle() {
+    setAuthError(null);
+    try {
+      await signInWithPopup(auth, googleProvider);
+    } catch (e) {
+      setAuthError((e as Error).message);
+    }
+  }
+
+  async function submitSetup(name: string, factionId: FactionId | null) {
+    if (!firebaseUser) return;
+    const initial = createInitialState();
+    const withFaction = {
+      ...initial,
+      player: { ...initial.player, factionId }
+    };
+    setUsername(name);
+    setState(withFaction);
+    try {
+      await createPlayer(firebaseUser.uid, name, withFaction);
+      setAuthPhase("playing");
+    } catch (e) {
+      setAuthError((e as Error).message);
+    }
+  }
+
+  async function handleSignOut() {
+    await signOut(auth);
+    setState(createInitialState());
+    setUsername("");
+    setLastBattle(null);
+    setFvfState({ phase: "idle" });
+  }
+
   function toggleTestingMode() {
     setTestingMode((prev) => {
       const next = !prev;
       if (next) {
-        // immediately bring next encounter to 20m away
         setState((s) => ({ ...s, nextEncounterAtMeters: s.creditedDistanceMeters + 20 }));
       }
       return next;
@@ -290,6 +387,36 @@ function App() {
     });
   }
 
+  if (authPhase === "loading") {
+    return (
+      <main className="shell">
+        <div className="auth-screen">
+          <div className="auth-logo">
+            <Zap size={32} />
+            <h1>Overworld</h1>
+          </div>
+          <p className="auth-sub">Loading…</p>
+        </div>
+      </main>
+    );
+  }
+
+  if (authPhase === "unauthenticated") {
+    return (
+      <main className="shell">
+        <LoginView onGoogleLogin={loginWithGoogle} error={authError} />
+      </main>
+    );
+  }
+
+  if (authPhase === "setup") {
+    return (
+      <main className="shell">
+        <SetupView onSubmit={submitSetup} error={authError} />
+      </main>
+    );
+  }
+
   return (
     <main className="shell">
       <section className="phone" aria-label="Overworld vertical slice">
@@ -303,6 +430,7 @@ function App() {
               gpsPos={gpsPos}
               gpsError={gpsError}
               testingMode={testingMode}
+              username={username}
               onToggleWalk={toggleWalk}
               onSimulateStep={simulateStep}
               onFightEncounter={fightEncounter}
@@ -312,6 +440,7 @@ function App() {
               onChallenge={challengeOpponent}
               onEndFvF={endFvF}
               onToggleTestingMode={toggleTestingMode}
+              onSignOut={handleSignOut}
             />
           )}
           {activeView === "map" && (
@@ -345,6 +474,7 @@ function WorldView({
   gpsPos,
   gpsError,
   testingMode,
+  username,
   onToggleWalk,
   onSimulateStep,
   onFightEncounter,
@@ -353,7 +483,8 @@ function WorldView({
   onPickEnemy,
   onChallenge,
   onEndFvF,
-  onToggleTestingMode
+  onToggleTestingMode,
+  onSignOut
 }: {
   state: GameState;
   lastBattle: BattleResult | null;
@@ -362,6 +493,7 @@ function WorldView({
   gpsPos: { lat: number; lng: number; accuracy: number } | null;
   gpsError: string | null;
   testingMode: boolean;
+  username: string;
   onToggleWalk: () => void;
   onSimulateStep: () => void;
   onFightEncounter: () => void;
@@ -371,6 +503,7 @@ function WorldView({
   onChallenge: (opp: PlayerOpponent) => void;
   onEndFvF: () => void;
   onToggleTestingMode: () => void;
+  onSignOut: () => void;
 }) {
   const selectedFaction = factions.find((f) => f.id === state.player.factionId);
   const currentCell = state.territory.find((cell) => cell.id === state.playerCellId);
@@ -384,12 +517,17 @@ function WorldView({
       <div className="map-surface">
         <header className="top-hud">
           <div>
-            <p className="eyebrow">AETHER Field</p>
+            <p className="eyebrow">AETHER Field · {username}</p>
             <h1>Overworld</h1>
           </div>
-          <div className="bp-pill" title="Battle power">
-            <Zap size={16} />
-            <span>{playerBp}</span>
+          <div className="hud-right">
+            <div className="bp-pill" title="Battle power">
+              <Zap size={16} />
+              <span>{playerBp}</span>
+            </div>
+            <button className="signout-btn" onClick={onSignOut} title="Sign out">
+              <LogOut size={15} />
+            </button>
           </div>
         </header>
 
@@ -1059,6 +1197,97 @@ function Log({ entries }: { entries: string[] }) {
         <li key={`${entry}-${index}`}>{entry}</li>
       ))}
     </ol>
+  );
+}
+
+// ── Login View ────────────────────────────────────────────────────
+function LoginView({ onGoogleLogin, error }: { onGoogleLogin: () => void; error: string | null }) {
+  return (
+    <div className="auth-screen">
+      <div className="auth-logo">
+        <Zap size={36} />
+        <h1>Overworld</h1>
+      </div>
+      <p className="auth-sub">AETHER Field — Bacoor, Cavite</p>
+      <div className="auth-card">
+        <p className="eyebrow" style={{ textAlign: "center", marginBottom: 12 }}>Sign in to play</p>
+        <button className="google-btn" onClick={onGoogleLogin}>
+          <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+            <path d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.716v2.259h2.908c1.702-1.567 2.684-3.875 2.684-6.615z" fill="#4285F4"/>
+            <path d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z" fill="#34A853"/>
+            <path d="M3.964 10.71A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.042l3.007-2.332z" fill="#FBBC05"/>
+            <path d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.958L3.964 7.29C4.672 5.163 6.656 3.58 9 3.58z" fill="#EA4335"/>
+          </svg>
+          Continue with Google
+        </button>
+        {error && <p className="auth-error">{error}</p>}
+      </div>
+    </div>
+  );
+}
+
+// ── Setup View (first time) ───────────────────────────────────────
+function SetupView({
+  onSubmit,
+  error
+}: {
+  onSubmit: (username: string, factionId: FactionId | null) => void;
+  error: string | null;
+}) {
+  const [name, setName] = useState("");
+  const [faction, setFaction] = useState<FactionId | null>(null);
+
+  return (
+    <div className="auth-screen">
+      <div className="auth-logo">
+        <Zap size={36} />
+        <h1>Create Agent</h1>
+      </div>
+      <div className="auth-card setup-card">
+        <div className="setup-field">
+          <label className="eyebrow" htmlFor="username-input">Agent Callsign</label>
+          <input
+            id="username-input"
+            className="setup-input"
+            type="text"
+            maxLength={20}
+            placeholder="e.g. Renz_G"
+            value={name}
+            onChange={(e) => setName(e.target.value.trim())}
+          />
+        </div>
+
+        <div className="setup-field">
+          <p className="eyebrow">Starting Faction (optional)</p>
+          <div className="faction-picker">
+            {factions.map((f) => (
+              <button
+                key={f.id}
+                className={faction === f.id ? "selected" : ""}
+                style={{ "--accent": f.color } as React.CSSProperties}
+                onClick={() => setFaction((prev) => (prev === f.id ? null : f.id))}
+              >
+                <Shield size={16} />
+                <span>{f.name}</span>
+              </button>
+            ))}
+          </div>
+          {faction && (
+            <p className="faction-motto">{factions.find((f) => f.id === faction)?.motto}</p>
+          )}
+        </div>
+
+        {error && <p className="auth-error">{error}</p>}
+
+        <button
+          className="primary-button"
+          disabled={name.length < 2}
+          onClick={() => onSubmit(name, faction)}
+        >
+          Enter the Field
+        </button>
+      </div>
+    </div>
   );
 }
 

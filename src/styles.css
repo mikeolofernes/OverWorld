@@ -788,6 +788,148 @@ h2 {
   border-left: 2px solid var(--line);
 }
 
+/* ── Auth screens ─────────────────────────────────── */
+
+.auth-screen {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+  min-height: 100vh;
+  padding: 32px 24px;
+}
+
+.auth-logo {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  color: var(--field);
+}
+
+.auth-logo h1 {
+  font-size: 2.4rem;
+  color: var(--text);
+  letter-spacing: -0.02em;
+}
+
+.auth-sub {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.82rem;
+  text-align: center;
+}
+
+.auth-card {
+  width: min(400px, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 24px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--panel-strong);
+}
+
+.setup-card {
+  gap: 18px;
+}
+
+.google-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 48px;
+  padding: 0 20px;
+  border-radius: 8px;
+  background: #fff;
+  color: #1f1f1f;
+  font-weight: 700;
+  font-size: 0.9rem;
+  cursor: pointer;
+  border: 1px solid rgba(0,0,0,0.12);
+  transition: background 120ms;
+}
+
+.google-btn:hover {
+  background: #f5f5f5;
+}
+
+.auth-error {
+  margin: 0;
+  padding: 8px 12px;
+  border-radius: 6px;
+  background: rgba(255, 95, 87, 0.12);
+  border: 1px solid rgba(255, 95, 87, 0.3);
+  color: #ffaaa5;
+  font-size: 0.78rem;
+}
+
+.setup-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.setup-field > .eyebrow {
+  margin: 0;
+}
+
+.setup-input {
+  width: 100%;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(244, 247, 232, 0.07);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.95rem;
+  outline: none;
+  transition: border-color 150ms;
+}
+
+.setup-input:focus {
+  border-color: var(--field);
+}
+
+.setup-input::placeholder {
+  color: var(--muted);
+}
+
+.setup-card .primary-button {
+  width: 100%;
+  min-height: 50px;
+  font-size: 1rem;
+}
+
+.setup-card .primary-button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* HUD right side (BP + sign-out) */
+.hud-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+.signout-btn {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  background: rgba(244, 247, 232, 0.08);
+  border: 1px solid var(--line);
+  color: var(--muted);
+  cursor: pointer;
+}
+
 /* ── Testing mode toggle ──────────────────────────── */
 
 .test-mode-toggle {
